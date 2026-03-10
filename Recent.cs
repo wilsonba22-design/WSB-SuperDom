@@ -1,6 +1,7 @@
 // 
 // Copyright (C) 2025, NinjaTrader LLC <www.ninjatrader.com>.
 // NinjaTrader reserves the right to modify or overwrite this NinjaScript component with each release.
+// Adaptado para C# 5 (NT8 compatível)
 //
 #region Using declarations
 using NinjaTrader.Core.FloatingPoint;
@@ -38,9 +39,9 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 		private				Typeface								typeFace;
 		private				bool?									wasAskMostRecentlyFilled;
 
-		public override void OnColumnLabelClicked(object sender, MouseButtonEventArgs e)
+		// CS0115 fix: remove override (método não existe na base desta versão do NT8)
+		public void OnColumnLabelClicked(object sender, MouseButtonEventArgs e)
 		{
-			// Immediately reset when user clicks header
 			foreach (KeyValuePair<double, Timer> kvp in resetAskTimers)
 				kvp.Value.Dispose();
 			resetAskTimers.Clear();
@@ -67,17 +68,14 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 				if (marketData.Price.ApproxCompare(currentAsk) == 0)
 				{
 					askPriceValues.AddOrUpdate(marketData.Price, marketData.Volume, 
-						(_, v) =>
+						(key, v) =>
 						{
 							if (ResetWhen == RecentResetWhen.PriceReturns)
 							{
-								// If the Ask moved away from this price and is now moving back, reset to the current volume
 								if (currentAsk.ApproxCompare(mostRecentLast) != 0)
 									return marketData.Volume;
 								return v + marketData.Volume;
 							}
-
-							// AskBidChange assumes that volume will be reset by the timer when the Ask moves away, so we can safely assume we're just adding here
 							return v + marketData.Volume;
 						});
 
@@ -87,39 +85,33 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 				else if (marketData.Price.ApproxCompare(currentBid) == 0)
 				{
 					bidPriceValues.AddOrUpdate(marketData.Price, marketData.Volume,
-						(_, v) =>
+						(key, v) =>
 						{
 							if (ResetWhen == RecentResetWhen.PriceReturns)
 							{
-								// If the Bid moved away from this price and is now moving back, reset to the current volume
 								if (currentBid.ApproxCompare(mostRecentLast) != 0)
 									return marketData.Volume;
 								return v + marketData.Volume;
 							}
-
-							// AskBidChange assumes that volume will be reset by the timer when the Bid moves away, so we can safely assume we're just adding here
 							return v + marketData.Volume;
 						});
 
 					mostRecentLast = marketData.Price;
 					wasAskMostRecentlyFilled = false;
 				}
-				else // Last filled between ask/bid
+				else
 				{
 					if (wasAskMostRecentlyFilled == true)
 					{
 						askPriceValues.AddOrUpdate(currentAsk, marketData.Volume,
-							(_, v) =>
+							(key, v) =>
 							{
 								if (ResetWhen == RecentResetWhen.PriceReturns)
 								{
-									// If the Ask moved away from this price and is now moving back, reset to the current volume
 									if (currentAsk.ApproxCompare(mostRecentLast) != 0)
 										return marketData.Volume;
 									return v + marketData.Volume;
 								}
-
-								// AskBidChange assumes that volume will be reset by the timer when the Ask moves away, so we can safely assume we're just adding here
 								return v + marketData.Volume;
 							});
 
@@ -129,17 +121,14 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 					else if (wasAskMostRecentlyFilled == false)
 					{
 						bidPriceValues.AddOrUpdate(currentBid, marketData.Volume,
-							(_, v) =>
+							(key, v) =>
 							{
 								if (ResetWhen == RecentResetWhen.PriceReturns)
 								{
-									// If the Bid moved away from this price and is now moving back, reset to the current volume
 									if (currentBid.ApproxCompare(mostRecentLast) != 0)
 										return marketData.Volume;
 									return v + marketData.Volume;
 								}
-
-								// AskBidChange assumes that volume will be reset by the timer when the Bid moves away, so we can safely assume we're just adding here
 								return v + marketData.Volume;
 							});
 
@@ -154,8 +143,8 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 
 			if (marketData.MarketDataType == MarketDataType.Ask)
 			{
-				// If price has moved away from old ask, then moved back, cancel the reset
-				if (resetAskTimers.TryRemove(marketData.Price, out Timer oldTimer))
+				Timer oldTimer;
+				if (resetAskTimers.TryRemove(marketData.Price, out oldTimer))
 					oldTimer.Dispose();
 				
 				if (marketData.Price.ApproxCompare(previousAsk) != 0)
@@ -167,8 +156,8 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 			}
 			else if (marketData.MarketDataType == MarketDataType.Bid)
 			{
-				// If price has moved away from old bid, then moved back, cancel the reset
-				if (resetBidTimers.TryRemove(marketData.Price, out Timer oldTimer))
+				Timer oldTimer;
+				if (resetBidTimers.TryRemove(marketData.Price, out oldTimer))
 					oldTimer.Dispose();
 
 				if (marketData.Price.ApproxCompare(previousBid) != 0)
@@ -182,15 +171,15 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 
 		protected override void OnRender(DrawingContext dc, double renderWidth)
 		{
-			// This may be true if the UI for a column hasn't been loaded yet (e.g., restoring multiple tabs from workspace won't load each tab until it's clicked by the user)
 			if (gridPen == null)
 			{
-				if (UiWrapper != null && PresentationSource.FromVisual(UiWrapper)?.CompositionTarget is { } target)
+				if (UiWrapper != null && PresentationSource.FromVisual(UiWrapper) != null
+					&& PresentationSource.FromVisual(UiWrapper).CompositionTarget != null)
 				{
-					Matrix m			= target.TransformToDevice;
-					double dpiFactor	= 1 / m.M11;
-					gridPen				= new Pen(Application.Current.TryFindResource("BorderThinBrush") as Brush,  1 * dpiFactor);
-					halfPenWidth		= gridPen.Thickness * 0.5;
+					Matrix m		= PresentationSource.FromVisual(UiWrapper).CompositionTarget.TransformToDevice;
+					double dpiFactor = 1 / m.M11;
+					gridPen			= new Pen(Application.Current.TryFindResource("BorderThinBrush") as Brush, 1 * dpiFactor);
+					halfPenWidth	= gridPen.Thickness * 0.5;
 				}
 			}
 
@@ -200,14 +189,14 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 				|| (SuperDom.Font.Bold && fontWeight != FontWeights.Bold)
 				|| (!SuperDom.Font.Bold && fontWeight == FontWeights.Bold))
 			{
-				// Only update this if something has changed
 				fontFamily			= SuperDom.Font.Family;
 				fontStyle			= SuperDom.Font.Italic ? FontStyles.Italic : FontStyles.Normal;
 				fontWeight			= SuperDom.Font.Bold ? FontWeights.Bold : FontWeights.Normal;
 				typeFace			= new Typeface(fontFamily, fontStyle, fontWeight, FontStretches.Normal);
 				heightUpdateNeeded	= true;
 			}
-			double verticalOffset	= -gridPen?.Thickness ?? 0;
+
+			double verticalOffset	= gridPen != null ? -gridPen.Thickness : 0;
 			double pixelsPerDip		= VisualTreeHelper.GetDpi(UiWrapper).PixelsPerDip;
 
 			lock (SuperDom.Rows)
@@ -215,23 +204,20 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 				{
 					if (renderWidth - halfPenWidth >= 0)
 					{
-						// Draw cell
-						Rect rect = new(-halfPenWidth, verticalOffset, renderWidth - halfPenWidth, SuperDom.ActualRowHeight);
+						Rect rect = new Rect(-halfPenWidth, verticalOffset, renderWidth - halfPenWidth, SuperDom.ActualRowHeight);
 
-						// Create a guidelines set
-						GuidelineSet guidelines = new();
+						GuidelineSet guidelines = new GuidelineSet();
 						guidelines.GuidelinesX.Add(rect.Left	+ halfPenWidth);
 						guidelines.GuidelinesX.Add(rect.Right	+ halfPenWidth);
-						guidelines.GuidelinesY.Add(rect.Top		+ halfPenWidth);
+						guidelines.GuidelinesY.Add(rect.Top	+ halfPenWidth);
 						guidelines.GuidelinesY.Add(rect.Bottom	+ halfPenWidth);
 
 						dc.PushGuidelineSet(guidelines);
 
-						// Draw the Bid and Ask rectangles
 						if (DisplayType == RecentDisplayType.BidAsk)
 						{
-							Rect bidRect = new(-halfPenWidth, verticalOffset, renderWidth / 2 - halfPenWidth, SuperDom.ActualRowHeight);
-							Rect askRect = new(renderWidth / 2 - halfPenWidth, verticalOffset, renderWidth / 2 - halfPenWidth, SuperDom.ActualRowHeight);
+							Rect bidRect = new Rect(-halfPenWidth, verticalOffset, renderWidth / 2 - halfPenWidth, SuperDom.ActualRowHeight);
+							Rect askRect = new Rect(renderWidth / 2 - halfPenWidth, verticalOffset, renderWidth / 2 - halfPenWidth, SuperDom.ActualRowHeight);
 							dc.DrawRectangle(BidBackColor, null, bidRect);
 							dc.DrawRectangle(AskBackColor, null, askRect);
 						}
@@ -240,53 +226,66 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 						else if (DisplayType == RecentDisplayType.Bid)
 							dc.DrawRectangle(BidBackColor, null, rect);
 
-						dc.DrawLine(gridPen, new Point(-gridPen?.Thickness ?? 0, rect.Bottom), new Point(renderWidth - halfPenWidth, rect.Bottom));
+						dc.DrawLine(gridPen, new Point(gridPen != null ? -gridPen.Thickness : 0, rect.Bottom), new Point(renderWidth - halfPenWidth, rect.Bottom));
 						dc.DrawLine(gridPen, new Point(rect.Right, verticalOffset), new Point(rect.Right, rect.Bottom));
 
-						// Write bid/ask volumes
-						if (SuperDom.IsConnected
-							&& !SuperDom.IsReloading
-							&& State == State.Active)
+						if (SuperDom.IsConnected && !SuperDom.IsReloading && State == State.Active)
 						{
-							if (DisplayType is RecentDisplayType.BidAsk or RecentDisplayType.Bid)
+							// BID
+							if (DisplayType == RecentDisplayType.BidAsk || DisplayType == RecentDisplayType.Bid)
 							{
-								if (bidPriceValues.TryGetValue(row.Price, out double bidVolume))
+								double bidVolume;
+								if (bidPriceValues.TryGetValue(row.Price, out bidVolume))
 								{
 									fontFamily = SuperDom.Font.Family;
 									typeFace = new Typeface(fontFamily, SuperDom.Font.Italic ? FontStyles.Italic : FontStyles.Normal, SuperDom.Font.Bold ? FontWeights.Bold : FontWeights.Normal, FontStretches.Normal);
 
 									if (renderWidth - 6 > 0)
 									{
-										FormattedText bidText = new(bidVolume > 0 ? bidVolume.ToString(Core.Globals.GeneralOptions.CurrentCulture) : string.Empty, Core.Globals.GeneralOptions.CurrentCulture, FlowDirection.LeftToRight, typeFace, SuperDom.Font.Size, BidForeColor, pixelsPerDip) { MaxLineCount = 1, MaxTextWidth = renderWidth / 2 - 6, Trimming = TextTrimming.CharacterEllipsis };
-										// Getting the text height is expensive, so only update it if something's changed
+										FormattedText bidText = new FormattedText(
+											bidVolume > 0 ? bidVolume.ToString(Core.Globals.GeneralOptions.CurrentCulture) : string.Empty,
+											Core.Globals.GeneralOptions.CurrentCulture,
+											FlowDirection.LeftToRight, typeFace,
+											SuperDom.Font.Size, BidForeColor, pixelsPerDip);
+										bidText.MaxLineCount = 1;
+										bidText.MaxTextWidth = renderWidth / 2 - 6;
+										bidText.Trimming = TextTrimming.CharacterEllipsis;
+
 										if (heightUpdateNeeded)
 										{
 											textHeight = bidText.Height;
 											heightUpdateNeeded = false;
 										}
-
-										dc.DrawText(bidText, new Point(0 + 4, verticalOffset + (SuperDom.ActualRowHeight - textHeight) / 2));
+										dc.DrawText(bidText, new Point(4, verticalOffset + (SuperDom.ActualRowHeight - textHeight) / 2));
 									}
 								}
 							}
 
-							if (DisplayType is RecentDisplayType.BidAsk or RecentDisplayType.Ask)
+							// ASK
+							if (DisplayType == RecentDisplayType.BidAsk || DisplayType == RecentDisplayType.Ask)
 							{
-								if (askPriceValues.TryGetValue(row.Price, out double askVolume))
+								double askVolume;
+								if (askPriceValues.TryGetValue(row.Price, out askVolume))
 								{
 									fontFamily = SuperDom.Font.Family;
 									typeFace = new Typeface(fontFamily, SuperDom.Font.Italic ? FontStyles.Italic : FontStyles.Normal, SuperDom.Font.Bold ? FontWeights.Bold : FontWeights.Normal, FontStretches.Normal);
 
 									if (renderWidth - 6 > 0)
 									{
-										FormattedText askText = new(askVolume > 0 ? askVolume.ToString(Core.Globals.GeneralOptions.CurrentCulture) : string.Empty, Core.Globals.GeneralOptions.CurrentCulture, FlowDirection.LeftToRight, typeFace, SuperDom.Font.Size, AskForeColor, pixelsPerDip) { MaxLineCount = 1, MaxTextWidth = renderWidth / 2 - 6, Trimming = TextTrimming.CharacterEllipsis };
-										// Getting the text height is expensive, so only update it if something's changed
+										FormattedText askText = new FormattedText(
+											askVolume > 0 ? askVolume.ToString(Core.Globals.GeneralOptions.CurrentCulture) : string.Empty,
+											Core.Globals.GeneralOptions.CurrentCulture,
+											FlowDirection.LeftToRight, typeFace,
+											SuperDom.Font.Size, AskForeColor, pixelsPerDip);
+										askText.MaxLineCount = 1;
+										askText.MaxTextWidth = renderWidth / 2 - 6;
+										askText.Trimming = TextTrimming.CharacterEllipsis;
+
 										if (heightUpdateNeeded)
 										{
 											textHeight = askText.Height;
 											heightUpdateNeeded = false;
 										}
-
 										dc.DrawText(askText, new Point(renderWidth / 2 + 4, verticalOffset + (SuperDom.ActualRowHeight - textHeight) / 2));
 									}
 								}
@@ -303,31 +302,32 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 		{
 			if (State == State.SetDefaults)
 			{
-				Name							= Gui.Resource.NinjaScriptSuperDomColumnRecentLabel;
-				Description						= Gui.Resource.NinjaScriptSuperDomColumnRecentDescription;
-				DefaultWidth					= 100;
-				PreviousWidth					= -1;
-				IsDataSeriesRequired			= false;
-				AskBackColor					= Application.Current.TryFindResource("brushPriceColumnBackground") as Brush;
-				AskForeColor					= Application.Current.TryFindResource("brushVolumeColumnForeground") as SolidColorBrush;
-				BidBackColor					= Application.Current.TryFindResource("brushPriceColumnBackground") as Brush;
-				BidForeColor					= Application.Current.TryFindResource("brushVolumeColumnForeground") as SolidColorBrush;
-				askPriceValues					= new ConcurrentDictionary<double, double>();
-				bidPriceValues					= new ConcurrentDictionary<double, double>();
-				DisplayType						= RecentDisplayType.BidAsk;
-				resetAskTimers					= new ConcurrentDictionary<double, Timer>();
-				resetBidTimers					= new ConcurrentDictionary<double, Timer>();
-				ResetWhen						= RecentResetWhen.BidAskChange;
-				ResetTolerance					= 2500;
+				Name						= "Recent";
+				Description					= "Displays the recent bid and ask volume at each price level";
+				DefaultWidth				= 100;
+				PreviousWidth				= -1;
+				IsDataSeriesRequired		= false;
+				AskBackColor				= Application.Current.TryFindResource("brushPriceColumnBackground") as Brush;
+				AskForeColor				= Application.Current.TryFindResource("brushVolumeColumnForeground") as SolidColorBrush;
+				BidBackColor				= Application.Current.TryFindResource("brushPriceColumnBackground") as Brush;
+				BidForeColor				= Application.Current.TryFindResource("brushVolumeColumnForeground") as SolidColorBrush;
+				askPriceValues				= new ConcurrentDictionary<double, double>();
+				bidPriceValues				= new ConcurrentDictionary<double, double>();
+				DisplayType					= RecentDisplayType.BidAsk;
+				resetAskTimers				= new ConcurrentDictionary<double, Timer>();
+				resetBidTimers				= new ConcurrentDictionary<double, Timer>();
+				ResetWhen					= RecentResetWhen.BidAskChange;
+				ResetTolerance				= 2500;
 			}
 			else if (State == State.Configure)
 			{
-				if (UiWrapper != null && PresentationSource.FromVisual(UiWrapper)?.CompositionTarget is { } target)
-				{ 
-					Matrix m			= target.TransformToDevice;
-					double dpiFactor	= 1 / m.M11;
-					gridPen				= new Pen(Application.Current.TryFindResource("BorderThinBrush") as Brush,  1 * dpiFactor);
-					halfPenWidth		= gridPen.Thickness * 0.5;
+				if (UiWrapper != null && PresentationSource.FromVisual(UiWrapper) != null
+					&& PresentationSource.FromVisual(UiWrapper).CompositionTarget != null)
+				{
+					Matrix m		= PresentationSource.FromVisual(UiWrapper).CompositionTarget.TransformToDevice;
+					double dpiFactor = 1 / m.M11;
+					gridPen			= new Pen(Application.Current.TryFindResource("BorderThinBrush") as Brush, 1 * dpiFactor);
+					halfPenWidth	= gridPen.Thickness * 0.5;
 				}
 			}
 			else if (State == State.Terminated)
@@ -336,7 +336,7 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 					kvp.Value.Dispose();
 				resetAskTimers.Clear();
 
-				foreach (KeyValuePair<double, Timer> kvp in resetBidTimers) 
+				foreach (KeyValuePair<double, Timer> kvp in resetBidTimers)
 					kvp.Value.Dispose();
 				resetBidTimers.Clear();
 			}
@@ -345,7 +345,8 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 		private void ResetAsk(object price)
 		{
 			double askPrice = (double)price;
-			if (resetAskTimers.TryRemove(askPrice, out Timer oldTimer))
+			Timer oldTimer;
+			if (resetAskTimers.TryRemove(askPrice, out oldTimer))
 				oldTimer.Dispose();
 
 			askPriceValues[askPrice] = 0;
@@ -355,10 +356,11 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 		private void ResetBid(object price)
 		{
 			double bidPrice = (double)price;
-			if (resetBidTimers.TryRemove(bidPrice, out Timer oldTimer))
+			Timer oldTimer;
+			if (resetBidTimers.TryRemove(bidPrice, out oldTimer))
 				oldTimer.Dispose();
 
-			bidPriceValues[bidPrice] = 0; 
+			bidPriceValues[bidPrice] = 0;
 			OnPropertyChanged();
 		}
 
@@ -383,8 +385,8 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 		[Browsable(false)]
 		public string AskBackgroundBrushSerialize
 		{
-			get => Gui.Serialize.BrushToString(AskBackColor, "brushAskPriceColumnBackground");
-			set => AskBackColor = Gui.Serialize.StringToBrush(value, "brushAskPriceColumnBackground");
+			get { return Gui.Serialize.BrushToString(AskBackColor, "brushAskPriceColumnBackground"); }
+			set { AskBackColor = Gui.Serialize.StringToBrush(value, "brushAskPriceColumnBackground"); }
 		}
 
 		[XmlIgnore]
@@ -394,10 +396,10 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 		[Browsable(false)]
 		public string AskForeColorSerialize
 		{
-			get => Gui.Serialize.BrushToString(AskForeColor);
-			set => AskForeColor = Gui.Serialize.StringToBrush(value);
+			get { return Gui.Serialize.BrushToString(AskForeColor); }
+			set { AskForeColor = Gui.Serialize.StringToBrush(value); }
 		}
-		
+
 		[XmlIgnore]
 		[Display(ResourceType = typeof(Custom.Resource), Name = "NinjaScriptRecentColumnBidBackground", GroupName = "PropertyCategoryVisual", Order = 116)]
 		public Brush BidBackColor { get; set; }
@@ -405,8 +407,8 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 		[Browsable(false)]
 		public string BidBackgroundBrushSerialize
 		{
-			get => Gui.Serialize.BrushToString(BidBackColor, "brushBidPriceColumnBackground");
-			set => BidBackColor = Gui.Serialize.StringToBrush(value, "brushBidPriceColumnBackground");
+			get { return Gui.Serialize.BrushToString(BidBackColor, "brushBidPriceColumnBackground"); }
+			set { BidBackColor = Gui.Serialize.StringToBrush(value, "brushBidPriceColumnBackground"); }
 		}
 
 		[XmlIgnore]
@@ -416,11 +418,10 @@ namespace NinjaTrader.NinjaScript.SuperDomColumns
 		[Browsable(false)]
 		public string BidForeColorSerialize
 		{
-			get => Gui.Serialize.BrushToString(BidForeColor);
-			set => BidForeColor = Gui.Serialize.StringToBrush(value);
+			get { return Gui.Serialize.BrushToString(BidForeColor); }
+			set { BidForeColor = Gui.Serialize.StringToBrush(value); }
 		}
 		#endregion
-
 		#endregion
 	}
 
